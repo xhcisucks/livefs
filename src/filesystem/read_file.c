@@ -19,7 +19,11 @@ const char *read_file(const char *path, size_t *out_size){
 
     struct stat filest;
     fstat(fd, &filest);
-    size_t size = filest.st_size;
+    if (filest.st_size <0){
+        fprintf(stderr, "invalid filest.st_size (negative size)\n");
+        return NULL;
+    }
+    size_t size = (unsigned)filest.st_size;
 
     char *buf = malloc(size + 1);
     if (!buf){

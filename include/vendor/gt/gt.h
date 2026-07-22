@@ -53,6 +53,7 @@ void gtmutex_unlock(GTMutex* mutex);
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <limits.h>
 #include <errno.h>
 
 #ifdef _WIN32
@@ -340,12 +341,13 @@ void* gtswitch(void* sp) {
         do {
             struct epoll_event events[128];
             int n;
+            assert(INT_MAX >= scheduler.epoll);
             do {
             n = epoll_wait(
     #ifdef _WIN32
                 (HANDLE)
     #endif            
-                scheduler.epoll, events, sizeof(events)/sizeof(*events), timeout);
+                (int)scheduler.epoll, events, sizeof(events)/sizeof(*events), timeout);
             } while (n < 0 && errno == EINTR);
             assert(n >= 0);
             for(size_t i = 0; i < (size_t)n; ++i) {
@@ -372,7 +374,7 @@ void* gtswitch(void* sp) {
     #ifdef _WIN32
                 (HANDLE)
     #endif
-                    scheduler.epoll, op, fd, &ev) < 0) {
+                    (int)scheduler.epoll, op, fd, &ev) < 0) {
                     perror("mod/del fd in epoll");
                     exit(1);
                 }
@@ -407,7 +409,8 @@ void gtblockfd(unsigned int fd, uint32_t events) {
     assert(thread->epoll_events);
     // TODO: Find a way to reuse this sheizung instead of adding and removing it.
     // Its cheap to add and remove but still.
-    GPollBucket* bucket = gpoll_map_insert(&scheduler.pollmap, fd);
+    assert(INT_MAX >= fd);
+    GPollBucket* bucket = gpoll_map_insert(&scheduler.pollmap, (int)fd);
     assert(bucket);
     int op = EPOLL_CTL_MOD;
     if(bucket->epoll_events == 0) op = EPOLL_CTL_ADD;
@@ -416,11 +419,12 @@ void gtblockfd(unsigned int fd, uint32_t events) {
         struct epoll_event ev;
         ev.events = bucket->epoll_events;
         ev.data.ptr = bucket;
+        assert(INT_MAX >= scheduler.epoll);
         if(epoll_ctl(
 #ifdef _WIN32
             (HANDLE)
 #endif
-            scheduler.epoll, op, fd, &ev) < 0) {
+            (int)scheduler.epoll, op, (int)fd, &ev) < 0) {
             perror("adding fd in epoll");
             exit(1);
         }
@@ -435,7 +439,7 @@ void gtinit(void) {
     gtlist_init(&scheduler.dead);
     intptr_t e = (intptr_t)epoll_create1(0);
     assert(e >= 0);
-    scheduler.epoll = e;
+    scheduler.epoll = (unsigned)e;
     GThread* main_thread = malloc(sizeof(GThread));
     assert(main_thread && "Ran out of memory");
     main_thread->sp = 0;
